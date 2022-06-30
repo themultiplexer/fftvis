@@ -110,10 +110,36 @@ function init() {
     const data = f.toComplexArray(input);
     f.transform(out, data);
 
-    //console.log(out)
+
+    var freqs = []
+    for ( let i = 0; i < out.length / 4; i ++ ) {
+      const re = out[2*i];
+      const im = out[2*i+1];
+      freqs[i] = Math.sqrt(re*re+im*im);
+    }
+    var maxpeak = Math.max(...freqs) + 0.000001
+
+    const width = out.length / 4;
+    const height = 1;
+    
+    const size = width * height;
+    const texdata = new Float32Array( 4 * size );
+    const color = new THREE.Color( 0xffeeff );
+    
+    for ( let i = 0; i < width; i ++ ) {
+      const mag = freqs[i] / maxpeak
+      const stride = i * 4;
+      texdata[ stride ] = mag;
+      texdata[ stride + 1 ] = mag;
+      texdata[ stride + 2 ] = mag;
+      texdata[ stride + 3 ] = 1.0;
+    }
+
+    var texture = new THREE.DataTexture( texdata, width, height, THREE.RGBAFormat, THREE.FloatType, THREE.UVMapping);
+    texture.needsUpdate = true;
 
 
-    //uniforms.texture1.value = texture
+    uniforms.texture1.value = texture
 
     // note: if you set options.objectMode=true, the `data` event will output AudioBuffers instead of Buffers
   });
