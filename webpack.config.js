@@ -1,8 +1,15 @@
 const path = require('path');
+const webpack = require('webpack')
 
 module.exports = {
     // a empty placeholder to define custom rules and more
     // (e.g. set loaders for specific file types)
+    resolve: {
+        fallback: {
+            "stream": require.resolve("stream-browserify"),
+            "buffer": require.resolve("buffer")
+        },
+    },
     module: {
         rules: [
             {
@@ -19,6 +26,14 @@ module.exports = {
     optimization: {
         minimize: false
     },
+    plugins: [
+        // Work around for Buffer is undefined:
+        // https://github.com/webpack/changelog-v5/issues/10
+        new webpack.ProvidePlugin({
+            process: "process/browser",
+            Buffer: ["buffer", "Buffer"],
+        }),
+    ],
     // set the webpack mode
     mode: "development",
     // set the entry point (main file of the web-application)
