@@ -4,14 +4,16 @@
  ********************************
  */
 import * as THREE from "three";
+import gsap from "gsap";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 const FFT = require('fft.js');
 const getUserMedia = require('get-user-media-promise');
 const MicrophoneStream = require('microphone-stream').default;
 
-import { vertShaderCube } from "./vertShaderCube.vert.js";
-import { fragShaderCube } from "./fragShaderCube.frag.js";
+import { vertShaderCube } from "./vert.js";
+import { fragShaderCube } from "./frag.js";
+import { Vector3 } from "three";
 
 let rectSidelengthX = 50;
 let rectSidelengthY = 50;
@@ -42,7 +44,7 @@ function init() {
   camera.position.z = 1.25;
   camera.position.y = -2;
   scene = new THREE.Scene();
-  
+
   let vertices, uvs;
   let geometry = new THREE.BufferGeometry();
   let indices;
@@ -77,6 +79,19 @@ function init() {
   geometry.computeVertexNormals();
 
 
+  const targetOrientation = new THREE.Quaternion().set(1.0, 1.0, 0.0, 1).normalize();
+  gsap.to({}, {
+    duration: 1,
+    onUpdate: function () {
+      //camera.position.y = this.progress()
+      //camera.setRotationFromAxisAngle(new Vector3(0,0,1,0), this.progress())
+      //camera.quaternion.slerp(targetOrientation, this.progress());
+      //camera.lookAt(0, 0, 0);
+      //THREE.Quaternion.slerp(camera.quaternion, targetOrientation, qm, 0.07);
+    }
+  });
+
+  //
 
   const size = width * height;
   texdata = new Array(size);
@@ -146,10 +161,17 @@ function init() {
       freqs[i] = Math.sqrt(re * re + im * im);
     }
 
-    if(freqs[1] > 40.0){
+    if (freqs[2] > 30.0) {
       scene.background = new THREE.Color('#222222')
+      if (camera.position.y < -1.9) {
+        camera.position.y += 0.01
+      }
     } else {
       scene.background = new THREE.Color('#111111')
+      if (camera.position.y > -2.2) {
+        camera.position.y -= 0.01
+      }
+
     }
 
 
