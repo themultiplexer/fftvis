@@ -13,19 +13,18 @@ const MicrophoneStream = require('microphone-stream').default;
 import { vertShaderCube } from "./vertShaderCube.vert.js";
 import { fragShaderCube } from "./fragShaderCube.frag.js";
 
-let rectSidelengthX = 400;
+let rectSidelengthX = 50;
 let rectSidelengthY = 50;
-let terrainWidth = 2;
+let terrainWidth = 3;
 
 
 // defining the variables
 let camera, scene, renderer, directionalLight, ambientLight;
 var uniforms, texture, texdata;
-const sample_size = 2048
-const freq_range = (sample_size / 2.0)
+const sample_size = 1024
 
-const width = (sample_size / 2.0);
-const height = 50;
+const width = 20;
+const height = 20;
 
 function init() {
   // +++ create a WebGLRenderer +++
@@ -39,13 +38,11 @@ function init() {
   document.body.appendChild(renderer.domElement);
 
   // adding rectSidelength camera PerspectiveCamera( fov, aspect, near, far)
-  camera = new THREE.PerspectiveCamera( 90, window.innerWidth / window.innerHeight, 0.01, 100 );
-  camera.position.z = 1.4;
-  camera.position.y = -1.3;
+  camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 100);
+  camera.position.z = 1.25;
+  camera.position.y = -2;
   scene = new THREE.Scene();
-  scene.background = new THREE.Color('#333333')
-
-
+  
   let vertices, uvs;
   let geometry = new THREE.BufferGeometry();
   let indices;
@@ -99,6 +96,8 @@ function init() {
     fragmentShader: fragShaderCube,
   });
 
+  material.side = THREE.DoubleSide;
+
   var mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
 
@@ -141,21 +140,21 @@ function init() {
     f.transform(out, data);
 
     var freqs = []
-    for (let i = 0; i < freq_range; i++) {
+    for (let i = 0; i < width; i++) {
       const re = out[2 * i];
       const im = out[2 * i + 1];
       freqs[i] = Math.sqrt(re * re + im * im);
     }
 
-    // Dont over ampify low frequencies (human hearing)
-    for (let i = 0; i < 15; i++) {
-      //freqs[i] /= 8.0;
+    if(freqs[1] > 40.0){
+      scene.background = new THREE.Color('#222222')
+    } else {
+      scene.background = new THREE.Color('#111111')
     }
-    
-    var maxpeak = Math.max(...freqs) + 0.000001
 
-    var line = new Array(freq_range)
-    for (let i = 0; i < freq_range; i++) {
+
+    var line = new Array(width)
+    for (let i = 0; i < width; i++) {
       var mag = freqs[i]
       line[i] = mag;
     }
