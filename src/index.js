@@ -32,7 +32,7 @@ const height = 30;
 
 var flicker = false
 var zoom = false
-var lines = false
+var lines = true
 
 function init() {
   // +++ create a WebGLRenderer +++
@@ -51,13 +51,13 @@ function init() {
   camera.position.y = -2;
   scene = new THREE.Scene();
 
-  let vertices, uvs;
+  let vertices, uvs, indices, v_bc;
   let geometry = new THREE.BufferGeometry();
-  let indices;
 
   vertices = []
   indices = []
   uvs = []
+  v_bc = []
 
   const x = -(terrainWidth / 2.0)
   const y = -(terrainWidth / 2.0)
@@ -68,6 +68,13 @@ function init() {
     for (let j = 0; j < rectSidelengthY; j++) {
       vertices.push(x + j * face_sizex, y + i * face_sizey + 0, i * face_sizey);
       uvs.push(j / rectSidelengthY, 1.0 - i / rectSidelengthX)
+      if ((i + j) % 3 == 0) {
+        v_bc.push(1.0, 0.0, 0.0)
+      } else if ((i + j) % 3 == 1) {
+        v_bc.push(0.0, 1.0, 0.0)
+      } else if ((i + j) % 3 == 2) {
+        v_bc.push(0.0, 0.0, 1.0)
+      }
     }
   }
   for (let i = 0; i < rectSidelengthX - 1; i++) {
@@ -79,8 +86,11 @@ function init() {
     }
   }
 
+  console.log(v_bc)
+
   geometry.setIndex(indices);
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute('v_bc', new THREE.Float32BufferAttribute(v_bc, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.computeVertexNormals();
 
@@ -163,7 +173,8 @@ function init() {
   uniforms = {
     u_resolution: { type: "v2", value: new THREE.Vector2() },
     texture1: { type: "t", value: texture },
-    lineWidth: { value: 35.0 }
+    lineWidth: { value: 0.0001 },
+    lines: { value: lines },
   };
 
   var material = new THREE.ShaderMaterial({
@@ -178,21 +189,12 @@ function init() {
   var mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
 
-  var line = new THREE.Line(geometry, material);
-  line.type = 'Line'
-
 
   gui.add(scene_params, "flicker").onChange(function (bool_val) {
     flicker = bool_val
   })
   gui.add(scene_params, "lines").onChange(function (bool_val) {
-    if (bool_val) {
-      scene.remove(mesh)
-      scene.add(line);
-    } else {
-      scene.remove(line)
-      scene.add(mesh);
-    }
+    uniforms.lines.value = bool_val
   })
   gui.add(scene_params, "zoom").onChange(function (bool_val) {
     zoom = bool_val
