@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import gsap from "gsap";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GUI } from "three/examples/jsm/libs/lil-gui.module.min.js";
 
 const FFT = require('fft.js');
 const getUserMedia = require('get-user-media-promise');
@@ -15,18 +16,23 @@ import { vertShaderCube } from "./vert.js";
 import { fragShaderCube } from "./frag.js";
 import { Vector3 } from "three";
 
-let rectSidelengthX = 50;
-let rectSidelengthY = 50;
+let rectSidelengthX = 60;
+let rectSidelengthY = 60;
 let terrainWidth = 3;
 
 
 // defining the variables
 let camera, scene, renderer, directionalLight, ambientLight;
 var uniforms, texture, texdata;
+var cam_controller;
 const sample_size = 1024
 
-const width = 20;
-const height = 20;
+const width = 30;
+const height = 30;
+
+var flicker = false
+var zoom = false
+var lines = false
 
 function init() {
   // +++ create a WebGLRenderer +++
@@ -54,19 +60,19 @@ function init() {
   uvs = []
 
   const x = -(terrainWidth / 2.0)
-  const z = -(terrainWidth / 2.0)
+  const y = -(terrainWidth / 2.0)
   const face_sizex = terrainWidth / rectSidelengthY
   const face_sizey = terrainWidth / rectSidelengthX
 
   for (let i = 0; i < rectSidelengthX; i++) {
     for (let j = 0; j < rectSidelengthY; j++) {
-      vertices.push(x + j * face_sizex, z + i * face_sizey + 0, 0);
+      vertices.push(x + j * face_sizex, y + i * face_sizey + 0, i * face_sizey);
       uvs.push(j / rectSidelengthY, 1.0 - i / rectSidelengthX)
     }
   }
   for (let i = 0; i < rectSidelengthX - 1; i++) {
     for (let j = 0; j < rectSidelengthY - 1; j++) {
-      let l1 = i * rectSidelengthY + j
+      let l1 = i * rectSidelengthX + j
       let l2 = (i + 1) * rectSidelengthY + j
       indices.push(l1, l2 + 1, l2);
       indices.push(l1, l1 + 1, l2 + 1);
@@ -91,7 +97,61 @@ function init() {
     }
   });
 
-  //
+  scene.background = new THREE.Color('#111111')
+
+  const gui = new GUI({ width: 400 });
+
+  //let axes = new THREE.AxesHelper(5.0);
+  //scene.add(axes)
+
+  // generate menu items
+  let scene_params = {
+    "flicker": flicker,
+    "zoom": zoom,
+    "cam": "Default Camera",
+    "lines": lines
+  };
+
+  cam_controller = gui.add(scene_params, "cam", { "Top Down": 0, "Front": 1, "Underside": 2, "Custom": 3 }).onChange(function (value) {
+
+    if (value == 3) {
+      return
+    }
+
+    let original = camera.position.clone()
+    let target = new THREE.Vector3(0, 0, 0)
+
+    switch (value) {
+      case 0:
+        target = new THREE.Vector3(0, 0, 2.5)
+        break;
+      case 1:
+        target = new THREE.Vector3(0, -2, 1.25)
+        break;
+      case 2:
+        target = new THREE.Vector3(0, 0, -2)
+      default:
+        break;
+    }
+
+    controls.removeEventListener('change', cameraChanged);
+    gsap.to({}, {
+      duration: 1,
+      onUpdate: function () {
+        camera.position.x = (1.0 - this.progress()) * original.x + this.progress() * target.x
+        camera.position.y = (1.0 - this.progress()) * original.y + this.progress() * target.y
+        camera.position.z = (1.0 - this.progress()) * original.z + this.progress() * target.z
+        camera.lookAt(0, 0, 0);
+        controls.update();
+      },
+      onComplete: function () {
+        controls.addEventListener('change', cameraChanged);
+      }
+    });
+  })
+
+
+
 
   const size = width * height;
   texdata = new Array(size);
@@ -102,7 +162,8 @@ function init() {
 
   uniforms = {
     u_resolution: { type: "v2", value: new THREE.Vector2() },
-    texture1: { type: "t", value: texture }
+    texture1: { type: "t", value: texture },
+    lineWidth: { value: 35.0 }
   };
 
   var material = new THREE.ShaderMaterial({
@@ -110,11 +171,32 @@ function init() {
     vertexShader: vertShaderCube,
     fragmentShader: fragShaderCube,
   });
-
+  material.transparent = true;
   material.side = THREE.DoubleSide;
+  material.extensions.derivatives = true;
 
   var mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
+
+  var line = new THREE.Line(geometry, material);
+  line.type = 'Line'
+
+
+  gui.add(scene_params, "flicker").onChange(function (bool_val) {
+    flicker = bool_val
+  })
+  gui.add(scene_params, "lines").onChange(function (bool_val) {
+    if (bool_val) {
+      scene.remove(mesh)
+      scene.add(line);
+    } else {
+      scene.remove(line)
+      scene.add(mesh);
+    }
+  })
+  gui.add(scene_params, "zoom").onChange(function (bool_val) {
+    zoom = bool_val
+  })
 
   let wireframeMaterial = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa,
@@ -129,6 +211,7 @@ function init() {
 
   // add controls to the scene
   const controls = new OrbitControls(camera, renderer.domElement);
+  controls.addEventListener('change', cameraChanged);
   controls.update();
 
   renderer.setPixelRatio(window.devicePixelRatio);
@@ -161,24 +244,30 @@ function init() {
       freqs[i] = Math.sqrt(re * re + im * im);
     }
 
+
     if (freqs[2] > 30.0) {
-      scene.background = new THREE.Color('#222222')
-      if (camera.position.y < -1.9) {
-        camera.position.y += 0.01
+      if (flicker) {
+        scene.background = new THREE.Color('#222222')
+      }
+      if (zoom) {
+        if (camera.position.y < -1.9) {
+          camera.position.y += 0.02
+        }
       }
     } else {
-      scene.background = new THREE.Color('#111111')
-      if (camera.position.y > -2.2) {
-        camera.position.y -= 0.01
+      if (flicker) {
+        scene.background = new THREE.Color('#111111')
       }
-
+      if (zoom) {
+        if (camera.position.y > -2.2) {
+          camera.position.y -= 0.02
+        }
+      }
     }
-
 
     var line = new Array(width)
     for (let i = 0; i < width; i++) {
-      var mag = freqs[i]
-      line[i] = mag;
+      line[i] = freqs[i];
     }
     texdata.push(...line)
     texdata = texdata.splice(width)
@@ -189,10 +278,13 @@ function init() {
     uniforms.texture1.value = texture
   });
 
-  // It also emits a format event with various details (frequency, channels, etc)
   micStream.on('format', function (format) {
-    console.log(format);
+    //console.log(format);
   });
+}
+
+function cameraChanged(event) {
+  cam_controller.setValue(3)
 }
 
 function onWindowResize(event) {
