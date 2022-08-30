@@ -8,11 +8,29 @@
         body {
             margin: 0;
         }
+
+        button {
+            -webkit-appearance: none;
+            font-family: Courier;
+            font-size: 12pt;
+            text-align: center;
+            position: absolute;
+            min-width: 80px;
+            border-radius: 0;
+            z-index: 1;
+        }
+
+        .pauseButton {
+            left: 20px;
+            top: 10px;
+        }
     </style>
 </head>
 
 <body>
+    <button id="PAW" class="pauseButton">Pause</button>
     <script type="module" src="main.js"></script>
 </body>
+
 
 </html>

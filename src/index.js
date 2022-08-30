@@ -7,6 +7,8 @@ import * as THREE from "three";
 import gsap from "gsap";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from "three/examples/jsm/libs/lil-gui.module.min.js";
+import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+//const { XRRigidTransform } = window;
 
 const FFT = require('fft.js');
 const getUserMedia = require('get-user-media-promise');
@@ -14,17 +16,18 @@ const MicrophoneStream = require('microphone-stream').default;
 
 import { vertShaderCube } from "./vert.js";
 import { fragShaderCube } from "./frag.js";
-import { Vector3 } from "three";
 
 let rectSidelengthX = 60;
 let rectSidelengthY = 60;
-let terrainWidth = 3;
-
+let terrainWidth = 3.0;
 
 // defining the variables
-let camera, scene, renderer, directionalLight, ambientLight;
+let camera, scene, renderer, cameraGroup, directionalLight, ambientLight;
 var uniforms, texture, texdata;
 var cam_controller;
+
+let initialCameraPosition = new THREE.Vector3(0, -2, 1.25)
+
 const sample_size = 1024
 
 const width = 30;
@@ -34,23 +37,99 @@ var flicker = false
 var zoom = false
 var lines = true
 
+document.getElementById("PAW").addEventListener("click", togglePause, false);
+
+function togglePause() {
+  const micStream = new MicrophoneStream({
+    bufferSize: sample_size
+  });
+
+  getUserMedia({ video: false, audio: true })
+    .then(function (stream) {
+      micStream.setStream(stream);
+    }).catch(function (error) {
+      console.log(error);
+    });
+
+  micStream.on('data', function (chunk) {
+    const input = MicrophoneStream.toRaw(chunk)
+
+    const f = new FFT(sample_size);
+    const out = f.createComplexArray();
+    const data = f.toComplexArray(input);
+    f.transform(out, data);
+
+    var freqs = []
+    for (let i = 0; i < width; i++) {
+      const re = out[2 * i];
+      const im = out[2 * i + 1];
+      freqs[i] = Math.sqrt(re * re + im * im);
+    }
+
+
+    if (freqs[2] > 30.0) {
+      if (flicker) {
+        scene.background = new THREE.Color('#222222')
+      }
+      if (zoom) {
+        if (cameraGroup.position.y < -1.9) {
+          cameraGroup.position.y += 0.02
+        }
+      }
+    } else {
+      if (flicker) {
+        scene.background = new THREE.Color('#111111')
+      }
+      if (zoom) {
+        if (cameraGroup.position.y > -2.2) {
+          cameraGroup.position.y -= 0.02
+        }
+      }
+    }
+
+    var line = new Array(width)
+    for (let i = 0; i < width; i++) {
+      line[i] = freqs[i];
+    }
+    texdata.push(...line)
+    texdata = texdata.splice(width)
+
+    texture = new THREE.DataTexture(new Float32Array(texdata), width, height, THREE.RedFormat, THREE.FloatType, THREE.UVMapping);
+    texture.needsUpdate = true;
+
+    uniforms.texture1.value = texture
+  });
+
+  micStream.on('format', function (format) {
+    //console.log(format);
+  });
+}
+
 function init() {
   // +++ create a WebGLRenderer +++
   // enables antialiasing (nicer geometry: borders without stair effect)
   renderer = new THREE.WebGLRenderer({ antialias: true });
-
+  renderer.xr.enabled = true;
   // get and set window dimension for the renderer
   renderer.setSize(window.innerWidth, window.innerHeight);
 
   // add dom object(renderer) to the body section of the index.html
   document.body.appendChild(renderer.domElement);
+  document.body.appendChild(VRButton.createButton(renderer));
 
-  // adding rectSidelength camera PerspectiveCamera( fov, aspect, near, far)
-  camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 100);
-  camera.position.z = 1.25;
-  camera.position.y = -2;
+
+
   scene = new THREE.Scene();
 
+  // adding rectSidelength camera PerspectiveCamera( fov, aspect, near, far)
+  camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 1000);
+
+
+  cameraGroup = new THREE.Group();
+  cameraGroup.add(camera);
+  scene.add(cameraGroup);
+  cameraGroup.position.set(0.0, -2.0, 1.25)
+  //camera.position.set(0.0, -2.0, 1.25)
   let vertices, uvs, indices, v_bc;
   let geometry = new THREE.BufferGeometry();
 
@@ -86,26 +165,11 @@ function init() {
     }
   }
 
-  console.log(v_bc)
-
   geometry.setIndex(indices);
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setAttribute('v_bc', new THREE.Float32BufferAttribute(v_bc, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.computeVertexNormals();
-
-
-  const targetOrientation = new THREE.Quaternion().set(1.0, 1.0, 0.0, 1).normalize();
-  gsap.to({}, {
-    duration: 1,
-    onUpdate: function () {
-      //camera.position.y = this.progress()
-      //camera.setRotationFromAxisAngle(new Vector3(0,0,1,0), this.progress())
-      //camera.quaternion.slerp(targetOrientation, this.progress());
-      //camera.lookAt(0, 0, 0);
-      //THREE.Quaternion.slerp(camera.quaternion, targetOrientation, qm, 0.07);
-    }
-  });
 
   scene.background = new THREE.Color('#111111')
 
@@ -128,7 +192,7 @@ function init() {
       return
     }
 
-    let original = camera.position.clone()
+    let original = initialCameraPosition
     let target = new THREE.Vector3(0, 0, 0)
 
     switch (value) {
@@ -136,7 +200,7 @@ function init() {
         target = new THREE.Vector3(0, 0, 2.5)
         break;
       case 1:
-        target = new THREE.Vector3(0, -2, 1.25)
+        target = initialCameraPosition
         break;
       case 2:
         target = new THREE.Vector3(0, 0, -2)
@@ -148,10 +212,10 @@ function init() {
     gsap.to({}, {
       duration: 1,
       onUpdate: function () {
-        camera.position.x = (1.0 - this.progress()) * original.x + this.progress() * target.x
-        camera.position.y = (1.0 - this.progress()) * original.y + this.progress() * target.y
-        camera.position.z = (1.0 - this.progress()) * original.z + this.progress() * target.z
-        camera.lookAt(0, 0, 0);
+        cameraGroup.position.x = (1.0 - this.progress()) * original.x + this.progress() * target.x
+        cameraGroup.position.y = (1.0 - this.progress()) * original.y + this.progress() * target.y
+        cameraGroup.position.z = (1.0 - this.progress()) * original.z + this.progress() * target.z
+        cameraGroup.lookAt(0, 0, 0);
         controls.update();
       },
       onComplete: function () {
@@ -159,9 +223,6 @@ function init() {
       }
     });
   })
-
-
-
 
   const size = width * height;
   texdata = new Array(size);
@@ -173,7 +234,7 @@ function init() {
   uniforms = {
     u_resolution: { type: "v2", value: new THREE.Vector2() },
     texture1: { type: "t", value: texture },
-    lineWidth: { value: 0.0001 },
+    lineWidth: { value: 0.05 },
     lines: { value: lines },
   };
 
@@ -220,69 +281,31 @@ function init() {
   onWindowResize();
   window.addEventListener('resize', onWindowResize, false);
 
-  const micStream = new MicrophoneStream({
-    bufferSize: sample_size
+
+
+  renderer.xr.addEventListener('sessionstart', () => {
+
+    //renderer.xr.getCamera().position.copy(camera.position);
+    //renderer.xr.getCamera().lookAt(0, 0, 0);
+    //controls.update()
+
+    //let offsetTransform = new XRRigidTransform({ x: 2, y: 0, z: 13 }, { x: 0, y: 1, z: 0, w: 1 })
+    //const baseReferenceSpace = renderer.xr.getReferenceSpace()
+    //renderer.xr.setOffsetReferenceSpace(baseReferenceSpace.getOffsetReferenceSpace(offsetTransform))
+    //cameraGroup.position.copy(renderer.xr.getCamera().position);
+    let vrpos = renderer.xr.getCamera().position
+    let vrrot = renderer.xr.getCamera().rotation
+    cameraGroup.position.set((cameraGroup.position.x - vrpos.x), (cameraGroup.position.y - vrpos.y), (cameraGroup.position.z - vrpos.z));
+    let rotMat = new THREE.Matrix4().makeRotationFromEuler(vrrot);
+    let invRotMat = new THREE.Matrix4();
+    invRotMat.copy(rotMat).invert()
+    //cameraGroup.setRotationFromMatrix(invRotMat)
+    cameraGroup.lookAt(0, 0, 0);
+
   });
 
-  getUserMedia({ video: false, audio: true })
-    .then(function (stream) {
-      micStream.setStream(stream);
-    }).catch(function (error) {
-      console.log(error);
-    });
 
-  micStream.on('data', function (chunk) {
-    const input = MicrophoneStream.toRaw(chunk)
-
-    const f = new FFT(sample_size);
-    const out = f.createComplexArray();
-    const data = f.toComplexArray(input);
-    f.transform(out, data);
-
-    var freqs = []
-    for (let i = 0; i < width; i++) {
-      const re = out[2 * i];
-      const im = out[2 * i + 1];
-      freqs[i] = Math.sqrt(re * re + im * im);
-    }
-
-
-    if (freqs[2] > 30.0) {
-      if (flicker) {
-        scene.background = new THREE.Color('#222222')
-      }
-      if (zoom) {
-        if (camera.position.y < -1.9) {
-          camera.position.y += 0.02
-        }
-      }
-    } else {
-      if (flicker) {
-        scene.background = new THREE.Color('#111111')
-      }
-      if (zoom) {
-        if (camera.position.y > -2.2) {
-          camera.position.y -= 0.02
-        }
-      }
-    }
-
-    var line = new Array(width)
-    for (let i = 0; i < width; i++) {
-      line[i] = freqs[i];
-    }
-    texdata.push(...line)
-    texdata = texdata.splice(width)
-
-    texture = new THREE.DataTexture(new Float32Array(texdata), width, height, THREE.RedFormat, THREE.FloatType, THREE.UVMapping);
-    texture.needsUpdate = true;
-
-    uniforms.texture1.value = texture
-  });
-
-  micStream.on('format', function (format) {
-    //console.log(format);
-  });
+  document.getElementById("PAW").click()
 }
 
 function cameraChanged(event) {
@@ -295,16 +318,8 @@ function onWindowResize(event) {
   uniforms.u_resolution.value.y = renderer.domElement.height;
 }
 
-// extendable render wrapper
-function render() {
-  renderer.render(scene, camera);
-}
-
-// animation function calling the renderer
-function animate() {
-  requestAnimationFrame(animate);
-  render();
-}
-
 init();
-animate();
+// animation function calling the renderer
+renderer.setAnimationLoop(function () {
+  renderer.render(scene, camera);
+});
