@@ -16,7 +16,7 @@ void main()
     vec3 posTmp = position;
     height = min(texture2D(texture1, uv).r  * 0.05 * (uv.x * 0.5 + 0.5), 1.0);
 
-    if(uv.y == 1.0 || uv.x == 1.0) {
+    if(uv.y == 1.0 || uv.x == 0.0 || uv.x == 1.0) {
         height = 0.0;
     }
 

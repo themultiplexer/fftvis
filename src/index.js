@@ -123,15 +123,16 @@ function init() {
 
   // adding rectSidelength camera PerspectiveCamera( fov, aspect, near, far)
   camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 1000);
-
+  //camera.position.set(0.0, -2.0, 1.25)
 
   cameraGroup = new THREE.Group();
   cameraGroup.add(camera);
   scene.add(cameraGroup);
   cameraGroup.position.set(0.0, -2.0, 1.25)
-  //camera.position.set(0.0, -2.0, 1.25)
+
   let vertices, uvs, indices, v_bc;
   let geometry = new THREE.BufferGeometry();
+
 
   vertices = []
   indices = []
@@ -145,23 +146,30 @@ function init() {
 
   for (let i = 0; i < rectSidelengthX; i++) {
     for (let j = 0; j < rectSidelengthY; j++) {
-      vertices.push(x + j * face_sizex, y + i * face_sizey + 0, i * face_sizey);
+      vertices.push(x + j * face_sizex, y + i * face_sizey + (i % 2 == 0 ? i + 1 : i) / 10.0, 0);
+      vertices.push(x + j * face_sizex, y + i * face_sizey + (i % 2 == 1 ? i + 1 : i) / 10.0, 0);
+      uvs.push(j / rectSidelengthY, 1.0 - i / rectSidelengthX)
       uvs.push(j / rectSidelengthY, 1.0 - i / rectSidelengthX)
       if ((i + j) % 3 == 0) {
         v_bc.push(1.0, 0.0, 0.0)
+        v_bc.push(1.0, 0.0, 0.0)
       } else if ((i + j) % 3 == 1) {
         v_bc.push(0.0, 1.0, 0.0)
+        v_bc.push(0.0, 1.0, 0.0)
       } else if ((i + j) % 3 == 2) {
+        v_bc.push(0.0, 0.0, 1.0)
         v_bc.push(0.0, 0.0, 1.0)
       }
     }
   }
-  for (let i = 0; i < rectSidelengthX - 1; i++) {
-    for (let j = 0; j < rectSidelengthY - 1; j++) {
-      let l1 = i * rectSidelengthX + j
-      let l2 = (i + 1) * rectSidelengthY + j
-      indices.push(l1, l2 + 1, l2);
-      indices.push(l1, l1 + 1, l2 + 1);
+  for (let level = 0; level < 2; level++) {
+    for (let i = level; i < rectSidelengthX - 1; i += 2) {
+      for (let j = 0; j < rectSidelengthY - 1; j++) {
+        let l1 = i * rectSidelengthY * 2 + j * 2 + level
+        let l2 = (i + 1) * rectSidelengthY * 2 + j * 2 + level
+        indices.push(l1, l2 + 2, l2);
+        indices.push(l1, l1 + 2, l2 + 2);
+      }
     }
   }
 
