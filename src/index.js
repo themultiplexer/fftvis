@@ -8,7 +8,6 @@ import gsap from "gsap";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from "three/examples/jsm/libs/lil-gui.module.min.js";
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
-//const { XRRigidTransform } = window;
 
 const FFT = require('fft.js');
 const getUserMedia = require('get-user-media-promise');
@@ -22,7 +21,7 @@ let rectSidelengthY = 60;
 let terrainWidth = 3.0;
 
 // defining the variables
-let camera, scene, renderer, cameraGroup, directionalLight, ambientLight;
+let camera, mesh, material, geometry, scene, renderer, cameraGroup, directionalLight, ambientLight;
 var uniforms, texture, texdata;
 var cam_controller;
 
@@ -36,6 +35,7 @@ const height = 30;
 var flicker = false
 var zoom = false
 var lines = true
+var gaps = false
 
 document.getElementById("PAW").addEventListener("click", togglePause, false);
 
@@ -105,33 +105,9 @@ function togglePause() {
   });
 }
 
-function init() {
-  // +++ create a WebGLRenderer +++
-  // enables antialiasing (nicer geometry: borders without stair effect)
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.xr.enabled = true;
-  // get and set window dimension for the renderer
-  renderer.setSize(window.innerWidth, window.innerHeight);
-
-  // add dom object(renderer) to the body section of the index.html
-  document.body.appendChild(renderer.domElement);
-  document.body.appendChild(VRButton.createButton(renderer));
-
-
-
-  scene = new THREE.Scene();
-
-  // adding rectSidelength camera PerspectiveCamera( fov, aspect, near, far)
-  camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 1000);
-  //camera.position.set(0.0, -2.0, 1.25)
-
-  cameraGroup = new THREE.Group();
-  cameraGroup.add(camera);
-  scene.add(cameraGroup);
-  cameraGroup.position.set(0.0, -2.0, 1.25)
-
+function createShaderGeometry(gaps) {
   let vertices, uvs, indices, v_bc;
-  let geometry = new THREE.BufferGeometry();
+  let grid_geometry = new THREE.BufferGeometry();
 
 
   vertices = []
@@ -146,8 +122,13 @@ function init() {
 
   for (let i = 0; i < rectSidelengthX; i++) {
     for (let j = 0; j < rectSidelengthY; j++) {
-      vertices.push(x + j * face_sizex, y + i * face_sizey + (i % 2 == 0 ? i + 1 : i) / 10.0, 0);
-      vertices.push(x + j * face_sizex, y + i * face_sizey + (i % 2 == 1 ? i + 1 : i) / 10.0, 0);
+      if (gaps) {
+        vertices.push(x + j * face_sizex, y + i * face_sizey + (i % 2 == 0 ? i + 1 : i) / 10.0, 0);
+        vertices.push(x + j * face_sizex, y + i * face_sizey + (i % 2 == 1 ? i + 1 : i) / 10.0, 0);
+      } else {
+        vertices.push(x + j * face_sizex, y + i * face_sizey, 0);
+        vertices.push(x + j * face_sizex, y + i * face_sizey, 0);
+      }
       uvs.push(j / rectSidelengthY, 1.0 - i / rectSidelengthX)
       uvs.push(j / rectSidelengthY, 1.0 - i / rectSidelengthX)
       if ((i + j) % 3 == 0) {
@@ -173,11 +154,39 @@ function init() {
     }
   }
 
-  geometry.setIndex(indices);
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  geometry.setAttribute('v_bc', new THREE.Float32BufferAttribute(v_bc, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.computeVertexNormals();
+  grid_geometry.setIndex(indices);
+  grid_geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  grid_geometry.setAttribute('v_bc', new THREE.Float32BufferAttribute(v_bc, 3));
+  grid_geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  grid_geometry.computeVertexNormals();
+
+  return grid_geometry
+}
+
+function init() {
+  // +++ create a WebGLRenderer +++
+  // enables antialiasing (nicer geometry: borders without stair effect)
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.xr.enabled = true;
+  // get and set window dimension for the renderer
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  // add dom object(renderer) to the body section of the index.html
+  document.body.appendChild(renderer.domElement);
+  document.body.appendChild(VRButton.createButton(renderer));
+
+  scene = new THREE.Scene();
+
+  // adding rectSidelength camera PerspectiveCamera( fov, aspect, near, far)
+  camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 1000);
+  //camera.position.set(0.0, -2.0, 1.25)
+
+  cameraGroup = new THREE.Group();
+  cameraGroup.add(camera);
+  scene.add(cameraGroup);
+  cameraGroup.position.set(0.0, -2.0, 1.25)
+
+  geometry = createShaderGeometry(gaps)
 
   scene.background = new THREE.Color('#111111')
 
@@ -191,7 +200,8 @@ function init() {
     "flicker": flicker,
     "zoom": zoom,
     "cam": "Default Camera",
-    "lines": lines
+    "lines": lines,
+    "gaps": gaps
   };
 
   cam_controller = gui.add(scene_params, "cam", { "Top Down": 0, "Front": 1, "Underside": 2, "Custom": 3 }).onChange(function (value) {
@@ -242,11 +252,11 @@ function init() {
   uniforms = {
     u_resolution: { type: "v2", value: new THREE.Vector2() },
     texture1: { type: "t", value: texture },
-    lineWidth: { value: 0.05 },
+    lineWidth: { value: 0.01 },
     lines: { value: lines },
   };
 
-  var material = new THREE.ShaderMaterial({
+  material = new THREE.ShaderMaterial({
     uniforms: uniforms,
     vertexShader: vertShaderCube,
     fragmentShader: fragShaderCube,
@@ -255,7 +265,7 @@ function init() {
   material.side = THREE.DoubleSide;
   material.extensions.derivatives = true;
 
-  var mesh = new THREE.Mesh(geometry, material);
+  mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
 
 
@@ -268,7 +278,13 @@ function init() {
   gui.add(scene_params, "zoom").onChange(function (bool_val) {
     zoom = bool_val
   })
-
+  gui.add(scene_params, "gaps").onChange(function (bool_val) {
+    gaps = bool_val
+    geometry = createShaderGeometry(gaps)
+    scene.remove(mesh)
+    mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+  })
   let wireframeMaterial = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa,
     wireframe: true,
